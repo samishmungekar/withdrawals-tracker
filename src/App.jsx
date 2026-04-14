@@ -1,5 +1,61 @@
 import { useState, useEffect } from "react";
 
+// ── Supabase client ──────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://gptfcawpaxlwdrnpityv.supabase.co";
+const SUPABASE_KEY = "sb_publishable_ZKdkjZMCtnI23RSt-xceOg_yr6QXvvF";
+const PAYMENT_SUBTYPES = ["bacs","faster","pswitch","chaps"];
+
+const sb = {
+  async upsertSessions(userName, date, sessions) {
+    await fetch(`${SUPABASE_URL}/rest/v1/sessions?user_name=eq.${encodeURIComponent(userName)}&date=eq.${encodeURIComponent(date)}`, {
+      method: "DELETE",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!sessions.length) return;
+    const rows = sessions.map(s => ({
+      id: s.id, user_name: userName, subtype: s.subtype,
+      task_type: s.taskType || "placement", outcome: s.outcome,
+      end_time: s.endTime, duration: s.duration || 0,
+      count: s.count || 1, bulk: s.bulk || false,
+      manual: s.manual || false, date,
+      zd_id: s.zdId || null,
+    }));
+    await fetch(`${SUPABASE_URL}/rest/v1/sessions`, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify(rows),
+    });
+  },
+  async getSessions(userName, date) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?user_name=eq.${encodeURIComponent(userName)}&date=eq.${encodeURIComponent(date)}&select=*`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return rows.map(r => ({ id: r.id, subtype: r.subtype, taskType: r.task_type, outcome: r.outcome, endTime: r.end_time, duration: r.duration, count: r.count, bulk: r.bulk, manual: r.manual, user: r.user_name, zdId: r.zd_id }));
+  },
+  async getSessionsForDates(userName, dates) {
+    if (!dates.length) return [];
+    const dateList = dates.map(d => `"${d}"`).join(",");
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?user_name=eq.${encodeURIComponent(userName)}&date=in.(${dateList})&select=*`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return rows.map(r => ({ id: r.id, subtype: r.subtype, taskType: r.task_type || (PAYMENT_SUBTYPES.includes(r.subtype) ? "payment" : "placement"), outcome: r.outcome, endTime: r.end_time, duration: r.duration, count: r.count, bulk: r.bulk, manual: r.manual, user: r.user_name, zdId: r.zd_id }));
+  },
+  async getAllForAvg() {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?manual=eq.false&duration=gt.0&select=subtype,task_type,duration,count`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  },
+  saveUser(u) { localStorage.setItem("wt_user", u); },
+  getUser() { return localStorage.getItem("wt_user") || null; },
+  clearUser() { localStorage.removeItem("wt_user"); },
+};
+
 // ── User roles ────────────────────────────────────────────────────────────────
 // roles: "analyst" | "senior" | "tl" | "manager"
 // canTrack: can log sessions
@@ -225,40 +281,17 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const ur = await window.storage.get("lastUser");
-        if (ur && ur.value && PINS[ur.value]) {
-          // PIN still required — just remembered for convenience
-        }
+        const lastUser = sb.getUser();
+        if (lastUser && PINS[lastUser]) { /* PIN still required */ }
       } catch {}
-
-      // ── Load team-wide averages for delta comparison ──────────────────────
       try {
-        const listed = await window.storage.list("sessions:");
-        const keys   = listed?.keys || [];
-        const allSess = [];
-        for (const key of keys) {
-          try {
-            const r = await window.storage.get(key);
-            if (!r) continue;
-            const rows = JSON.parse(r.value);
-            const PAYMENT_SUBTYPES = ["bacs","faster","pswitch","chaps"];
-            rows.forEach(s => {
-              if (!s.manual && s.duration > 0 && s.count > 0) {
-                allSess.push({
-                  subtype:  s.subtype,
-                  taskType: s.taskType || (PAYMENT_SUBTYPES.includes(s.subtype) ? "payment" : "placement"),
-                  rate:     s.duration / (s.count || 1),
-                });
-              }
-            });
-          } catch {}
-        }
-        // Straight average per subtype+taskType
+        const rows = await sb.getAllForAvg();
         const avgs = {};
-        allSess.forEach(s => {
-          const key = `${s.subtype}:${s.taskType}`;
+        rows.forEach(r => {
+          if (!r.duration || !r.count) return;
+          const key = `${r.subtype}:${r.task_type || (PAYMENT_SUBTYPES.includes(r.subtype) ? "payment" : "placement")}`;
           if (!avgs[key]) avgs[key] = { sum: 0, count: 0 };
-          avgs[key].sum   += s.rate;
+          avgs[key].sum += r.duration / r.count;
           avgs[key].count += 1;
         });
         const result = {};
@@ -271,7 +304,7 @@ export default function App() {
   // ── Persist sessions ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
-    window.storage.set(`sessions:${todayKey()}:${user}`, JSON.stringify(sessions)).catch(() => {});
+    sb.upsertSessions(user, todayKey(), sessions).catch(() => {});
   }, [sessions, user]);
 
   // ── Load dashboard data ─────────────────────────────────────────────────────
@@ -279,70 +312,14 @@ export default function App() {
     if (tab !== "dashboard") return;
     (async () => {
       setDashLoading(true);
-      const dates  = new Set(dateRange(period));
+      const dates  = dateRange(period);
       const result = {};
       TEAM.forEach(u => { result[u] = []; });
-
-      try {
-        // List all session keys then filter by date range
-        const listed = await window.storage.list("sessions:");
-        const keys   = listed?.keys || [];
-
-        for (const key of keys) {
-          // Matches both old format (sessions:DATE) and new (sessions:DATE:USER)
-          const parts = key.split(":");
-          if (parts.length < 2) continue;
-          const date  = parts[1];
-          const uName = parts[2] || null;
-          if (!dates.has(date)) continue;
-
-          try {
-            const r = await window.storage.get(key);
-            if (!r) continue;
-            const sessions = JSON.parse(r.value);
-
-            if (uName && result[uName]) {
-              // New format — sessions:DATE:USER
-              // Stamp taskType from subtype if missing (backfill old sessions)
-              const PAYMENT_SUBTYPES = ["bacs","faster","pswitch","chaps"];
-              const stamped = sessions.map(s => ({
-                ...s,
-                taskType: s.taskType || (PAYMENT_SUBTYPES.includes(s.subtype) ? "payment" : "placement")
-              }));
-              result[uName].push(...stamped);
-            } else {
-              // Old format — sessions:DATE, each session has a user field
-              sessions.forEach(s => {
-                const u = s.user;
-                if (u && result[u]) result[u].push(s);
-                else if (!u) {
-                  // No user field — assign to whoever is logged in
-                  TEAM.forEach(t => { if (result[t]) result[t].push(s); });
-                }
-              });
-            }
-          } catch {}
-        }
-      } catch {
-        // Fallback: try keys directly if list() fails
-        const dates2 = dateRange(period);
-        for (const u of TEAM) {
-          for (const date of dates2) {
-            try {
-              const r = await window.storage.get(`sessions:${date}:${u}`);
-              if (r) result[u].push(...JSON.parse(r.value));
-            } catch {}
-            try {
-              const r = await window.storage.get(`sessions:${date}`);
-              if (r) {
-                const ss = JSON.parse(r.value);
-                ss.filter(s => s.user === u).forEach(s => result[u].push(s));
-              }
-            } catch {}
-          }
-        }
-      }
-
+      await Promise.all(TEAM.filter(u => USERS[u].canTrack).map(async u => {
+        try {
+          result[u] = await sb.getSessionsForDates(u, dates);
+        } catch {}
+      }));
       setTeamData(result);
       setDashLoading(false);
     })();
@@ -374,14 +351,10 @@ export default function App() {
     setUser(u);
     // Route non-trackers directly to dashboard
     if (!USERS[u]?.canTrack) setTab("dashboard");
-    window.storage.set("lastUser", u).catch(() => {});
+    sb.saveUser(u);
     try {
-      const r = await window.storage.get(`sessions:${todayKey()}:${u}`);
-      if (r) {
-        const PAYMENT_SUBTYPES = ["bacs","faster","pswitch","chaps"];
-        const raw = JSON.parse(r.value);
-        setSessions(raw.map(s => ({ ...s, taskType: s.taskType || (PAYMENT_SUBTYPES.includes(s.subtype) ? "payment" : "placement") })));
-      } else { setSessions([]); }
+      const raw = await sb.getSessions(u, todayKey());
+      setSessions(raw.map(s => ({ ...s, taskType: s.taskType || (PAYMENT_SUBTYPES.includes(s.subtype) ? "payment" : "placement") })));
     } catch { setSessions([]); }
   }
 
@@ -389,7 +362,7 @@ export default function App() {
     setUser(null);
     setSessions([]);
     setActive(null); setPaused(false); setPausedAt(null); setPicking(null); setPending(null);
-    window.storage.set("lastUser", "").catch(() => {});
+    sb.clearUser();
   }
 
   // ── Tracker actions ─────────────────────────────────────────────────────────
@@ -595,11 +568,9 @@ export default function App() {
                     if (!USERS[u].canTrack) continue;
                     for (const date of dates) {
                       try {
-                        const r = await window.storage.get(`sessions:${date}:${u}`);
-                        if (!r) continue;
-                        const ss = JSON.parse(r.value);
+                        const ss = await sb.getSessions(u, date);
                         ss.filter(s => exportTaskType === "all" || (s.taskType || "placement") === exportTaskType)
-                      .forEach(s => rows.push({ ...s, user: u, date }));
+                          .forEach(s => rows.push({ ...s, user: u, date }));
                       } catch {}
                     }
                   }
