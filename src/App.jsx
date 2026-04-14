@@ -711,9 +711,11 @@ export default function App() {
           <div style={{ fontSize: 15, fontWeight: 600, color: "#f1f5f9" }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {/* Main tab nav */}
+          {/* Main tab nav — filtered by role */}
           <div style={{ display: "flex", background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: 3, gap: 3 }}>
-            {[["track","Track"],["summary","Summary"],["dashboard","Dashboard"]].map(([v, label]) => (
+            {[["track","Track"],["summary","Summary"],["dashboard","Dashboard"]].filter(([v]) =>
+              v === "dashboard" || (v === "track" && canTrack) || (v === "summary" && canTrack)
+            ).map(([v, label]) => (
               <button key={v} onClick={() => setTab(v)} style={{ padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", background: tab === v ? "#1e40af" : "transparent", color: tab === v ? "#fff" : "#64748b", transition: "all 0.15s" }}>
                 {label}
               </button>
