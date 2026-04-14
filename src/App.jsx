@@ -211,10 +211,12 @@ export default function App() {
   const [ts, setTs]                 = useState(Date.now());
   const [teamAvgs, setTeamAvgs]     = useState({});
   const [teamFilter, setTeamFilter] = useState("Withdrawals");
-  const [showExport, setShowExport] = useState(false);
-  const [exportFrom, setExportFrom] = useState(todayKey());
-  const [exportTo, setExportTo]     = useState(todayKey());
+  const [showExport, setShowExport]       = useState(false);
+  const [exportFrom, setExportFrom]       = useState(todayKey());
+  const [exportTo, setExportTo]           = useState(todayKey());
+  const [exportTaskType, setExportTaskType] = useState("all");
   const [exportLoading, setExportLoading] = useState(false);
+
 
   const mono = { fontFamily: "'DM Mono', monospace" };
   const card = { background: "#0d1321", border: "1px solid #1e293b", borderRadius: 10, padding: "14px 16px" };
@@ -569,8 +571,8 @@ export default function App() {
               <div style={{ fontSize: 10, color: "#475569", marginBottom: 5 }}>Task type</div>
               <div style={{ display: "flex", gap: 6 }}>
                 {["all", "placement", "payment"].map(t => (
-                  <button key={t} onClick={() => setTaskType(t === "all" ? taskType : t)}
-                    style={{ flex: 1, padding: "7px", borderRadius: 7, border: `1px solid ${taskType === t || t === "all" ? "#1e40af" : "#1e293b"}`, background: t === "all" ? "#111827" : taskType === t ? "#1e3a8a" : "#0d1321", color: "#f1f5f9", fontSize: 11, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
+                  <button key={t} onClick={() => setExportTaskType(t)}
+                    style={{ flex: 1, padding: "7px", borderRadius: 7, border: `1px solid ${exportTaskType === t ? "#1e40af" : "#1e293b"}`, background: exportTaskType === t ? "#1e3a8a" : "#0d1321", color: "#f1f5f9", fontSize: 11, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}>
                     {t === "all" ? "Both" : TASK_TYPES[t]?.label}
                   </button>
                 ))}
@@ -596,7 +598,8 @@ export default function App() {
                         const r = await window.storage.get(`sessions:${date}:${u}`);
                         if (!r) continue;
                         const ss = JSON.parse(r.value);
-                        ss.forEach(s => rows.push({ ...s, user: u, date }));
+                        ss.filter(s => exportTaskType === "all" || (s.taskType || "placement") === exportTaskType)
+                      .forEach(s => rows.push({ ...s, user: u, date }));
                       } catch {}
                     }
                   }
@@ -629,15 +632,34 @@ export default function App() {
                       s.count || 1, s.outcome, s.zdId || "", s.bulk ? "Yes" : "No"
                     ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(","));
                   });
-                  // Download
-                  const blob = new Blob([csvRows.join("
-")], { type: "text/csv" });
-                  const url  = URL.createObjectURL(blob);
-                  const a    = document.createElement("a");
-                  a.href     = url;
-                  a.download = `withdrawals_${exportFrom}_to_${exportTo}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
+                  /* generate Excel using SheetJS */
+                  const XLSX = window.XLSX;
+                  const wsData = [
+                    ["Date","Task Type","Subtype","Process Owner","Team","Completed Time","SLA Deadline","SLA Met","Time Taken (mins)","Entries","Outcome","ZD Ticket ID","Bulk"]
+                  ];
+                  rows.forEach(s => {
+                    const st = ALL_SUBTYPES.find(x => x.id === s.subtype);
+                    const tt = TASK_TYPES[s.taskType || "placement"];
+                    const endDate = new Date(s.endTime);
+                    const compTime = endDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+                    const slaMins = tt.slaHour * 60 + tt.slaMin;
+                    const compMins = endDate.getHours() * 60 + endDate.getMinutes();
+                    const slaMet = compMins <= slaMins ? "Yes" : "No";
+                    const timeMins = s.duration ? Math.round(s.duration / 60000) : 0;
+                    wsData.push([
+                      s.date, tt?.label || s.taskType, st?.label || s.subtype,
+                      s.user || s.user_name,
+                      USERS[s.user || s.user_name]?.team || "Withdrawals",
+                      compTime, `${tt.slaHour}:${String(tt.slaMin).padStart(2,"0")}`,
+                      slaMet, timeMins, s.count || 1, s.outcome, s.zdId || "",
+                      s.bulk ? "Yes" : "No"
+                    ]);
+                  });
+                  const ws = XLSX.utils.aoa_to_sheet(wsData);
+                  ws["!cols"] = [8,18,18,14,14,14,14,8,16,8,12,12,6].map(w => ({ wch: w }));
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, "Sessions");
+                  XLSX.writeFile(wb, `withdrawals_${exportFrom}_to_${exportTo}.xlsx`);
                   setShowExport(false);
                 } catch(e) { console.error(e); }
                 setExportLoading(false);
