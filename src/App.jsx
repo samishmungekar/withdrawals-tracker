@@ -17,8 +17,7 @@ const sb = {
       task_type: s.taskType || "placement", outcome: s.outcome,
       end_time: s.endTime, duration: s.duration || 0,
       count: s.count || 1, bulk: s.bulk || false,
-      manual: s.manual || false, date,
-      zd_id: s.zdId || null,
+      manual: s.manual || false, date, zd_id: s.zdId || null,
     }));
     await fetch(`${SUPABASE_URL}/rest/v1/sessions`, {
       method: "POST",
@@ -27,32 +26,38 @@ const sb = {
     });
   },
   async getSessions(userName, date) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?user_name=eq.${encodeURIComponent(userName)}&date=eq.${encodeURIComponent(date)}&select=*`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-    });
-    if (!res.ok) return [];
-    const rows = await res.json();
-    return rows.map(r => ({ id: r.id, subtype: r.subtype, taskType: r.task_type, outcome: r.outcome, endTime: r.end_time, duration: r.duration, count: r.count, bulk: r.bulk, manual: r.manual, user: r.user_name, zdId: r.zd_id }));
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?user_name=eq.${encodeURIComponent(userName)}&date=eq.${encodeURIComponent(date)}&select=*`, {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!res.ok) return [];
+      const rows = await res.json();
+      return rows.map(r => ({ id: r.id, subtype: r.subtype, taskType: r.task_type || (PAYMENT_SUBTYPES.includes(r.subtype) ? "payment" : "placement"), outcome: r.outcome, endTime: r.end_time, duration: r.duration, count: r.count, bulk: r.bulk, manual: r.manual, user: r.user_name, zdId: r.zd_id }));
+    } catch { return []; }
   },
   async getSessionsForDates(userName, dates) {
     if (!dates.length) return [];
-    const dateList = dates.map(d => `"${d}"`).join(",");
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?user_name=eq.${encodeURIComponent(userName)}&date=in.(${dateList})&select=*`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-    });
-    if (!res.ok) return [];
-    const rows = await res.json();
-    return rows.map(r => ({ id: r.id, subtype: r.subtype, taskType: r.task_type || (PAYMENT_SUBTYPES.includes(r.subtype) ? "payment" : "placement"), outcome: r.outcome, endTime: r.end_time, duration: r.duration, count: r.count, bulk: r.bulk, manual: r.manual, user: r.user_name, zdId: r.zd_id }));
+    try {
+      const dateList = dates.map(d => `"${d}"`).join(",");
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?user_name=eq.${encodeURIComponent(userName)}&date=in.(${dateList})&select=*`, {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!res.ok) return [];
+      const rows = await res.json();
+      return rows.map(r => ({ id: r.id, subtype: r.subtype, taskType: r.task_type || (PAYMENT_SUBTYPES.includes(r.subtype) ? "payment" : "placement"), outcome: r.outcome, endTime: r.end_time, duration: r.duration, count: r.count, bulk: r.bulk, manual: r.manual, user: r.user_name, zdId: r.zd_id }));
+    } catch { return []; }
   },
   async getAllForAvg() {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?manual=eq.false&duration=gt.0&select=subtype,task_type,duration,count`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-    });
-    if (!res.ok) return [];
-    return await res.json();
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sessions?manual=eq.false&duration=gt.0&select=subtype,task_type,duration,count`, {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch { return []; }
   },
   saveUser(u) { localStorage.setItem("wt_user", u); },
-  getUser() { return localStorage.getItem("wt_user") || null; },
+  async getUser() { return localStorage.getItem("wt_user") || null; },
   clearUser() { localStorage.removeItem("wt_user"); },
 };
 
@@ -76,11 +81,17 @@ const USERS = {
   Vivek:      { role: "manager", team: "all",         canTrack: false, canExport: true,  canDashboard: true  },
   Mayukh:     { role: "manager", team: "all",         canTrack: false, canExport: true,  canDashboard: true  },
   Samruddha:  { role: "manager", team: "all",         canTrack: false, canExport: true,  canDashboard: true  },
+  // Onboarding analysts
+  Prathamesh: { role: "analyst", team: "Onboarding",  canTrack: true,  canExport: false, canDashboard: true  },
+  Pran:       { role: "analyst", team: "Onboarding",  canTrack: true,  canExport: false, canDashboard: true  },
+  Akanksha:   { role: "analyst", team: "Onboarding",  canTrack: true,  canExport: false, canDashboard: true  },
+  Devendra:   { role: "analyst", team: "Onboarding",  canTrack: true,  canExport: false, canDashboard: true  },
+  Mamata:     { role: "analyst", team: "Onboarding",  canTrack: true,  canExport: false, canDashboard: true  },
 };
 
 const TEAM      = Object.keys(USERS);
 const TRACKERS  = TEAM.filter(u => USERS[u].canTrack);  // shown in tracker dropdown
-const TEAMS     = ["Withdrawals"];                        // expand as new teams onboard
+const TEAMS     = ["Withdrawals", "Onboarding"];
 
 const PINS = {
   Samish:    "3847",
@@ -93,7 +104,12 @@ const PINS = {
   Prajwal:   "8374",
   Vivek:     "1926",
   Mayukh:    "7045",
-  Samruddha: "3618",
+  Samruddha:  "3618",
+  Prathamesh: "2947",
+  Pran:       "5831",
+  Akanksha:   "7364",
+  Devendra:   "4719",
+  Mamata:     "8253",
 };
 
 const TASK_TYPES = {
@@ -130,16 +146,58 @@ const TASK_TYPES = {
       { id: "chaps",   label: "CHAPS",            icon: "💷" },
     ],
   },
+  wal: {
+    id:       "wal",
+    label:    "WAL",
+    slaHour:  21,
+    slaMin:   0,
+    slaLabel: "9:00 PM",
+    color:    "#0f6e56",
+    team:     "Onboarding",
+    subtypes: [
+      { id: "wal_isa",  label: "ISA",  icon: "📄" },
+      { id: "wal_gia",  label: "GIA",  icon: "📄" },
+      { id: "wal_jisa", label: "JISA", icon: "📄" },
+      { id: "wal_sipp", label: "SIPP", icon: "📄" },
+      { id: "wal_tp",   label: "TP",   icon: "📄" },
+    ],
+  },
+  wil: {
+    id:       "wil",
+    label:    "WIL",
+    slaHour:  21,
+    slaMin:   0,
+    slaLabel: "9:00 PM",
+    color:    "#1D9E75",
+    team:     "Onboarding",
+    subtypes: [
+      { id: "wil_isa",  label: "ISA",             icon: "📋" },
+      { id: "wil_gia",  label: "GIA",             icon: "📋" },
+      { id: "wil_jisa", label: "JISA",            icon: "📋" },
+      { id: "wil_isipp",label: "ISIPP",           icon: "📋" },
+      { id: "wil_tp",   label: "TP",              icon: "📋" },
+      { id: "wil_cb",   label: "Corporate Bonds", icon: "📋" },
+      { id: "wil_te",   label: "Trigger Events",  icon: "📋" },
+    ],
+  },
 };
 
 // All subtypes across both task types for lookup
-const ALL_SUBTYPES = [...TASK_TYPES.placement.subtypes, ...TASK_TYPES.payment.subtypes];
+const ALL_SUBTYPES = Object.values(TASK_TYPES).flatMap(tt => tt.subtypes);
 
 const OUTCOMES = [
   { id: "completed", label: "Completed",         color: "#22c55e", bg: "#052e16" },
   { id: "awaiting",  label: "Awaiting Response", color: "#f59e0b", bg: "#1c1408" },
   { id: "pending",   label: "Pending",            color: "#94a3b8", bg: "#0d1219" },
+  { id: "rejected",  label: "Rejected",           color: "#ef4444", bg: "#1a0505" },
 ];
+// Outcomes available per task type
+const OUTCOMES_FOR = {
+  placement: ["completed","awaiting","pending"],
+  payment:   ["completed","awaiting","pending"],
+  wal:       ["completed","awaiting","pending","rejected"],
+  wil:       ["completed","awaiting","pending","rejected"],
+};
 const OUTCOME_MAP = Object.fromEntries(OUTCOMES.map(o => [o.id, o]));
 
 const AVATAR_COLORS = {
@@ -261,6 +319,7 @@ export default function App() {
   const [responseError, setResponseError] = useState("");
 
   // ── Dashboard state ─────────────────────────────────────────────────────────
+  const [teamView, setTeamView]     = useState("Withdrawals"); // which team's data to show
   const [period, setPeriod]         = useState("today");
   const [teamData, setTeamData]     = useState({});
   const [dashLoading, setDashLoading] = useState(false);
@@ -281,7 +340,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const lastUser = sb.getUser();
+        const lastUser = await sb.getUser();
         if (lastUser && PINS[lastUser]) { /* PIN still required */ }
       } catch {}
       try {
@@ -315,7 +374,10 @@ export default function App() {
       const dates  = dateRange(period);
       const result = {};
       TEAM.forEach(u => { result[u] = []; });
-      await Promise.all(TEAM.filter(u => USERS[u].canTrack).map(async u => {
+      const trackersForView = TEAM.filter(u => USERS[u].canTrack && (
+        isManagerView ? USERS[u].team === teamView : USERS[u].team === userConfig?.team
+      ));
+      await Promise.all(trackersForView.map(async u => {
         try {
           result[u] = await sb.getSessionsForDates(u, dates);
         } catch {}
@@ -323,7 +385,7 @@ export default function App() {
       setTeamData(result);
       setDashLoading(false);
     })();
-  }, [tab, period, ts, taskType]);
+  }, [tab, period, ts, taskType, teamView]);
 
   useEffect(() => {
     const id = setInterval(() => { if (tab === "dashboard") setTs(Date.now()); }, 60000);
@@ -351,6 +413,10 @@ export default function App() {
     setUser(u);
     // Route non-trackers directly to dashboard
     if (!USERS[u]?.canTrack) setTab("dashboard");
+    // Set default task type and team view based on team
+    if (USERS[u]?.team === "Onboarding") { setTeamView("Onboarding"); setTaskType("wal"); }
+    else if (USERS[u]?.team === "all") { setTeamView("Withdrawals"); setTaskType("placement"); }
+    else { setTeamView("Withdrawals"); setTaskType("placement"); }
     sb.saveUser(u);
     try {
       const raw = await sb.getSessions(u, todayKey());
@@ -407,7 +473,7 @@ export default function App() {
       endTime: pending?.endTime || Date.now(), duration: pending?.duration || 0,
       user, count, bulk: count > 1, taskType: sessionTaskType,
       team: userConfig?.team || "Withdrawals",
-      ...(outcomeId === "awaiting" && zdId ? { zdId: zdId.trim().toUpperCase() } : {}),
+      ...(zdId ? { zdId: zdId.trim().toUpperCase() } : {}),
     }]);
     setFlash(outcomeId); setTimeout(() => setFlash(null), 700);
     setPicking(null); setPending(null); setBulkMode(false); setBulkCount(""); setZdId("");
@@ -478,7 +544,8 @@ export default function App() {
   const pickingSt     = ALL_SUBTYPES.find(s => s.id === pickingOutcome);
 
   // ── Dashboard analytics ─────────────────────────────────────────────────────
-  const allSessions   = Object.values(teamData).flat().filter(s => (s.taskType || "placement") === taskType);
+  const teamTaskTypes = teamView === "Onboarding" ? ["wal","wil"] : ["placement","payment"];
+  const allSessions   = Object.values(teamData).flat().filter(s => teamTaskTypes.includes(s.taskType || "placement") && (s.taskType || "placement") === taskType);
   const teamTickets   = allSessions.length;
   const teamEntries   = allSessions.reduce((a, s) => a + (s.count || 1), 0);
   const teamMs        = allSessions.reduce((a, s) => a + (s.duration || 0), 0);
@@ -692,9 +759,25 @@ export default function App() {
               </button>
             ))}
           </div>
-          {/* Task type switcher — shown on all tabs */}
+          {/* Team selector — managers/TLs only */}
+          {isManagerView && (
+            <div style={{ display: "flex", background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: 3, gap: 3 }}>
+              {["Withdrawals", "Onboarding"].map(t => (
+                <button key={t} onClick={() => {
+                  if (active || pickingOutcome) return;
+                  setTeamView(t);
+                  setTaskType(t === "Onboarding" ? "wal" : "placement");
+                }} style={{ padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", background: teamView === t ? (t === "Onboarding" ? "#0f6e56" : "#1e40af") : "transparent", color: teamView === t ? "#fff" : "#64748b", transition: "all 0.15s" }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Task type switcher — filtered by selected team */}
           <div style={{ display: "flex", background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: 3, gap: 3 }}>
-            {Object.values(TASK_TYPES).map(tt => (
+            {Object.values(TASK_TYPES).filter(tt =>
+              teamView === "Onboarding" ? tt.team === "Onboarding" : !tt.team || tt.team === "Withdrawals"
+            ).map(tt => (
               <button key={tt.id} onClick={() => { if (!active && !pickingOutcome) setTaskType(tt.id); }}
                 style={{ padding: "5px 14px", borderRadius: 6, border: "none", cursor: active || pickingOutcome ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", background: taskType === tt.id ? tt.color : "transparent", color: taskType === tt.id ? "#fff" : "#64748b", transition: "all 0.15s", opacity: active && taskType !== tt.id ? 0.5 : 1 }}>
                 {tt.label}
@@ -702,7 +785,7 @@ export default function App() {
             ))}
           </div>
           {/* User selector — PIN gated */}
-          {tab !== "dashboard" && (
+          {(tab !== "dashboard" || !canTrack) && (
             user
               ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: "6px 12px" }}>
@@ -714,8 +797,11 @@ export default function App() {
               : <div style={{ position: "relative" }}>
                   <select value="" onChange={e => requestUser(e.target.value)} style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 8, color: "#475569", fontSize: 13, fontFamily: "'DM Sans', sans-serif", fontWeight: 500, padding: "7px 28px 7px 12px", cursor: "pointer", outline: "none", appearance: "none" }}>
                     <option value="">Select your name</option>
-                    <optgroup label="Team">
-                      {TEAM.filter(u => USERS[u].canTrack).map(u => <option key={u} value={u}>{u}</option>)}
+                    <optgroup label="Withdrawals">
+                      {TEAM.filter(u => USERS[u].canTrack && USERS[u].team === "Withdrawals").map(u => <option key={u} value={u}>{u}</option>)}
+                    </optgroup>
+                    <optgroup label="Onboarding">
+                      {TEAM.filter(u => USERS[u].canTrack && USERS[u].team === "Onboarding").map(u => <option key={u} value={u}>{u}</option>)}
                     </optgroup>
                     <optgroup label="Team Leads">
                       {TEAM.filter(u => USERS[u].role === "tl").map(u => <option key={u} value={u}>{u}</option>)}
@@ -730,15 +816,7 @@ export default function App() {
           )}
           {/* Period selector + team filter + export — dashboard only */}
           {tab === "dashboard" && (<>
-            {isManagerView && TEAMS.length > 1 && (
-              <div style={{ position: "relative" }}>
-                <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 8, color: "#f1f5f9", fontSize: 12, fontFamily: "'DM Sans', sans-serif", padding: "7px 24px 7px 10px", cursor: "pointer", outline: "none", appearance: "none" }}>
-                  {isManager && <option value="all">All Teams</option>}
-                  {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#475569", pointerEvents: "none", fontSize: 10 }}>▼</span>
-              </div>
-            )}
+
             <div style={{ display: "flex", background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: 3, gap: 3 }}>
               {["today","week","month"].map(p => (
                 <button key={p} onClick={() => setPeriod(p)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", background: period === p ? "#1e40af" : "transparent", color: period === p ? "#fff" : "#64748b", transition: "all 0.15s" }}>
@@ -816,9 +894,12 @@ export default function App() {
               })()}
               {/* ZD ID field — shown when Awaiting Response is the likely outcome */}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
-                {OUTCOMES.map(o => {
-                  const isMandatory = ["bacs","faster","pswitch","adhoc"].includes(pickingOutcome);
-                  const disabled = isMandatory ? !(parseInt(bulkCount) > 0) : (bulkMode && !(parseInt(bulkCount) > 1));
+                {OUTCOMES.filter(o => (OUTCOMES_FOR[taskType] || OUTCOMES_FOR.placement).includes(o.id)).map(o => {
+                  const isMandatoryBulk = ["bacs","faster","pswitch","adhoc"].includes(pickingOutcome);
+                  const isOnboarding = ["wal","wil"].includes(pending?.taskType || taskType);
+                  const disabled = isMandatoryBulk ? !(parseInt(bulkCount) > 0)
+                    : isOnboarding ? !zdId.trim()
+                    : (bulkMode && !(parseInt(bulkCount) > 1));
                   return (
                     <button key={o.id} onClick={() => !disabled && logOutcome(o.id)}
                       style={{ background: o.bg, color: disabled ? "#33333388" : o.color, border: `1px solid ${disabled ? "#ffffff11" : o.color + "44"}`, borderRadius: 7, padding: "8px 15px", fontSize: 12, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, transition: "border-color 0.15s" }}
@@ -835,19 +916,27 @@ export default function App() {
                 </button>
               </div>
 
-              {/* ZD ID — mandatory when Awaiting Response is selected */}
-              <div style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 8, padding: "10px 12px", marginTop: 4 }}>
-                <div style={{ fontSize: 10, color: "#475569", marginBottom: 5 }}>
-                  Zendesk ticket ID <span style={{ color: "#f59e0b" }}>— required if marking as Awaiting Response</span>
-                </div>
-                <input
-                  type="text"
-                  value={zdId}
-                  onChange={e => setZdId(e.target.value)}
-                  placeholder="e.g. ZD-1042"
-                  style={{ background: "#0d1321", border: `1px solid ${zdId ? "#f59e0b55" : "#334155"}`, borderRadius: 6, color: "#f1f5f9", fontSize: 13, fontFamily: "'DM Mono', monospace", padding: "5px 10px", width: "100%", outline: "none", boxSizing: "border-box" }}
-                />
-              </div>
+              {/* ZD ID — mandatory for Onboarding, optional hint for Withdrawals Awaiting */}
+              {(() => {
+                const isOnboardingTask = ["wal","wil"].includes(pending?.taskType || taskType);
+                return (
+                  <div style={{ background: isOnboardingTask ? "#1c1408" : "#111827", border: `1px solid ${isOnboardingTask ? "#f59e0b55" : "#1e293b"}`, borderRadius: 8, padding: "10px 12px", marginTop: 4 }}>
+                    <div style={{ fontSize: 10, color: isOnboardingTask ? "#f59e0b" : "#475569", marginBottom: 5 }}>
+                      Zendesk ticket ID {isOnboardingTask
+                        ? <span style={{ fontWeight: 600 }}>— required</span>
+                        : <span>— required if marking as Awaiting Response</span>}
+                    </div>
+                    <input
+                      type="text"
+                      value={zdId}
+                      onChange={e => setZdId(e.target.value)}
+                      placeholder="e.g. ZD-1042"
+                      autoFocus={isOnboardingTask}
+                      style={{ background: "#0d1321", border: `1px solid ${zdId ? "#f59e0b55" : isOnboardingTask ? "#f59e0b33" : "#334155"}`, borderRadius: 6, color: "#f1f5f9", fontSize: 13, fontFamily: "'DM Mono', monospace", padding: "5px 10px", width: "100%", outline: "none", boxSizing: "border-box" }}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1195,7 +1284,7 @@ export default function App() {
             <div style={{ textAlign: "center", color: "#334155", padding: "60px", fontSize: 13 }}>Loading team data…</div>
           ) : (<>
             {/* KPIs */}
-            <div style={{ fontSize: 10, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>Team overview — {PERIOD_LABELS[period].toLowerCase()}</div>
+            <div style={{ fontSize: 10, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>{teamView} — {PERIOD_LABELS[period].toLowerCase()}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 20 }}>
               {[
                 { label: "Total tickets",    value: teamTickets,       sub: `${teamEntries} entries`,       color: "#60a5fa" },
