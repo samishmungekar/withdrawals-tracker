@@ -719,7 +719,15 @@ export default function App() {
               : <div style={{ position: "relative" }}>
                   <select value="" onChange={e => requestUser(e.target.value)} style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 8, color: "#475569", fontSize: 13, fontFamily: "'DM Sans', sans-serif", fontWeight: 500, padding: "7px 28px 7px 12px", cursor: "pointer", outline: "none", appearance: "none" }}>
                     <option value="">Select your name</option>
-                    {TEAM.map(u => <option key={u} value={u}>{u}</option>)}
+                    <optgroup label="Team">
+                      {TEAM.filter(u => USERS[u].canTrack).map(u => <option key={u} value={u}>{u}</option>)}
+                    </optgroup>
+                    <optgroup label="Team Leads">
+                      {TEAM.filter(u => USERS[u].role === "tl").map(u => <option key={u} value={u}>{u}</option>)}
+                    </optgroup>
+                    <optgroup label="Managers">
+                      {TEAM.filter(u => USERS[u].role === "manager").map(u => <option key={u} value={u}>{u}</option>)}
+                    </optgroup>
                   </select>
                   <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#475569", pointerEvents: "none", fontSize: 10 }}>▼</span>
                   <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#475569", pointerEvents: "none", fontSize: 10 }}>▼</span>
